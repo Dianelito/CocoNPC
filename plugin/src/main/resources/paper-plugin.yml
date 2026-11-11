@@ -3,7 +3,7 @@ version: ${version}
 main: com.pumpkings.coconpc.CocoNPC
 description: Advanced NPC management plugin for modern Paper servers.
 api-version: '1.21'
-author: Pumpkings
+author: Pumpkings, Dianelito
 dependencies:
   server:
     packetevents:
