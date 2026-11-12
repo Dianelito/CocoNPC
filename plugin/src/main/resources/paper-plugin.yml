@@ -35,6 +35,7 @@ permissions:
       CocoNPC.viewdistance: true
       CocoNPC.reload: true
       CocoNPC.animate: true
+      CocoNPC.mob: true
   CocoNPC.spawn:
     description: Spawn new NPCs.
     default: op
@@ -79,4 +80,7 @@ permissions:
     default: op
   CocoNPC.animate:
     description: Play and stop NPC animations.
+    default: op
+  CocoNPC.mob:
+    description: Manage custom .bbmodel mobs.
     default: op

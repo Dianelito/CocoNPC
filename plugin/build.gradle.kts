@@ -62,6 +62,10 @@ tasks {
         }
     }
 
+    jar {
+        archiveClassifier.set("plain")
+    }
+
     shadowJar {
         archiveClassifier.set("")
     }

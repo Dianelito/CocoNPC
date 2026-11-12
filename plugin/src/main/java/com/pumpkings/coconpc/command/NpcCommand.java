@@ -49,7 +49,8 @@ public class NpcCommand implements BasicCommand {
             Map.entry("preload",      "CocoNPC.reload"),
             Map.entry("reload",       "CocoNPC.reload"),
             Map.entry("animate",      "CocoNPC.animate"),
-            Map.entry("animation_stop","CocoNPC.animate")
+            Map.entry("animation_stop","CocoNPC.animate"),
+            Map.entry("mob",          "CocoNPC.mob")
     );
 
     public NpcCommand(CocoNPC plugin) {
@@ -79,6 +80,7 @@ public class NpcCommand implements BasicCommand {
         handlers.put("clone",        new CloneCommand(plugin));
         handlers.put("animate",      new AnimateCommand(plugin));
         handlers.put("animation_stop",new AnimateCommand(plugin));
+        handlers.put("mob",          new MobCommand(plugin));
     }
 
     private boolean allowed(Player player, String subcommand) {
@@ -134,6 +136,7 @@ public class NpcCommand implements BasicCommand {
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc skin <gray><id> <skin> <dark_gray>- <gray>Change NPC skin"));
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc preload <dark_gray>- <gray>Preload local skins"));
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc setkey <gray><key> <dark_gray>- <gray>Set the MineSkin API key"));
+        player.sendMessage(mm("<dark_gray> » <yellow>/coconpc mob <list|spawn|remove|reload|info> <gray>[id] <dark_gray>- <gray>Manage .bbmodel mobs"));
     }
 
     private List<String> skinSuggestions(String prefix) {
@@ -161,6 +164,14 @@ public class NpcCommand implements BasicCommand {
                 .collect(Collectors.toList());
     }
 
+    private List<String> mobIdSuggestions(String prefix) {
+        return plugin.getMobRegistry().getDefinitions().stream()
+                .map(com.pumpkings.coconpc.core.mob.MobDefinition::getId)
+                .filter(s -> s.toLowerCase().startsWith(prefix.toLowerCase()))
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
     @Override
     public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
         if (args.length <= 1) {
@@ -178,6 +189,7 @@ public class NpcCommand implements BasicCommand {
         if (args.length == 2) {
             return switch (sub) {
                 case "viewdistance" -> filter(List.of("16", "32", "48", "64", "80"), args[1]);
+                case "mob" -> filter(List.of("list", "spawn", "remove", "reload", "info"), args[1]);
                 case "create", "spawn" -> {
                     int nextId = 1;
                     while (getNpcById(String.valueOf(nextId)) != null) nextId++;
@@ -198,6 +210,18 @@ public class NpcCommand implements BasicCommand {
                 case "create", "spawn", "skin" -> skinSuggestions(args[2]);
                 case "resize" -> filter(List.of("0.5", "1.0", "1.5", "2.0"), args[2]);
                 case "item", "equip" -> filter(List.of("right", "left"), args[2]);
+                case "mob" -> {
+                    String mobAction = args[1].toLowerCase();
+                    if (mobAction.equals("spawn") || mobAction.equals("info")) {
+                        yield mobIdSuggestions(args[2]);
+                    }
+                    if (mobAction.equals("remove") || mobAction.equals("delete")) {
+                        List<String> options = new ArrayList<>(mobIdSuggestions(args[2]));
+                        options.add("all");
+                        yield filter(options, args[2]);
+                    }
+                    yield List.of();
+                }
                 default -> List.of();
             };
         }

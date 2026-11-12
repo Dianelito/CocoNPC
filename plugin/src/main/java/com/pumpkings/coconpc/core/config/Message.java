@@ -92,7 +92,27 @@ public enum Message {
     SKIN_CHANGING("{prefix}<color:#FFE300>Changing skin<color:#888888>..."),
     SKIN_GENERATION_FAILED("{prefix}<color:#FF3344>Skin generation failed: <color:#FFE300>{error}"),
     SKIN_APPLIED("{prefix}<color:#42F56C>Skin applied in <color:#FFE300>{time}s<color:#42F56C>."),
-    CLONE_SUCCESS("{prefix}<color:#CCCCCC>NPC <color:#FFE300>#{source} <color:#CCCCCC>cloned as <color:#FFE300>#{new}<color:#888888>.");
+    CLONE_SUCCESS("{prefix}<color:#CCCCCC>NPC <color:#FFE300>#{source} <color:#CCCCCC>cloned as <color:#FFE300>#{new}<color:#888888>."),
+    MOB_USAGE("{prefix}<color:#FF3344>Usage: <color:#FFE300>/coconpc mob <list|spawn|remove|reload|info> [id]"),
+    MOB_SPAWN_USAGE("{prefix}<color:#FF3344>Usage: <color:#FFE300>/coconpc mob spawn <id>"),
+    MOB_REMOVE_USAGE("{prefix}<color:#FF3344>Usage: <color:#FFE300>/coconpc mob remove <id|all>"),
+    MOB_INFO_USAGE("{prefix}<color:#FF3344>Usage: <color:#FFE300>/coconpc mob info <id>"),
+    MOB_NOT_FOUND("{prefix}<color:#FF3344>No custom mob definition found with ID <color:#FFE300>{id}<color:#FF3344>."),
+    MOB_LIST_HEADER("<color:#FFE300><st>                    </st> <color:#3BFFC7>ᴄᴜꜱᴛᴏᴍ ᴍᴏʙꜱ <color:#FFE300><st>                    </st>"),
+    MOB_LIST_ENTRY("<color:#888888>» <color:#FFE300>{id} <color:#888888>| <color:#CCCCCC>{driver} <color:#888888>| <color:#CCCCCC>{cubes} cubes <color:#888888>| <color:#CCCCCC>{alive} alive <color:#888888>| {status}"),
+    MOB_LIST_EMPTY("{prefix}<color:#FF3344>No .bbmodel files were found in <color:#FFE300>plugins/CocoNPC/mobs<color:#FF3344>."),
+    MOB_SPAWNING("{prefix}<color:#CCCCCC>Preparing textures for <color:#FFE300>{id}<color:#888888>..."),
+    MOB_SPAWNED("{prefix}<color:#42F56C>Spawned custom mob <color:#FFE300>{id}<color:#42F56C>."),
+    MOB_SPAWN_FAILED("{prefix}<color:#FF3344>Could not spawn <color:#FFE300>{id}<color:#FF3344>: <color:#FFE300>{error}"),
+    MOB_TEXTURE_FAILED("{prefix}<color:#FF3344>Textures for <color:#FFE300>{id}<color:#FF3344> failed: <color:#FFE300>{error}"),
+    MOB_REMOVED("{prefix}<color:#FF3344>Removed <color:#FFE300>{amount} <color:#FF3344>mob(s) of <color:#FFE300>{id}<color:#FF3344>."),
+    MOB_REMOVED_ALL("{prefix}<color:#FF3344>Removed <color:#FFE300>{amount} <color:#FF3344>custom mob(s)."),
+    MOB_RELOADED("{prefix}<color:#42F56C>Reloaded <color:#FFE300>{amount} <color:#42F56C>custom mob definition(s). Textures are generating in the background."),
+    MOB_INFO_HEADER("<color:#FFE300><st>                    </st> <color:#3BFFC7>ᴍᴏʙ <color:#888888>— <color:#FFE300>{id} <color:#FFE300><st>                    </st>"),
+    MOB_INFO_LINE("<color:#888888>» <color:#CCCCCC>{key}: <color:#FFE300>{value}"),
+    MOB_TEXTURES_READY("<color:#42F56C>ready"),
+    MOB_TEXTURES_GENERATING("<color:#FFE300>generating..."),
+    MOB_TEXTURES_FAILED("<color:#FF3344>failed");
 
     private final String defaultMessage;
 
