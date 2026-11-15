@@ -31,12 +31,12 @@ public class NpcEntity {
     private com.pumpkings.coconpc.core.packet.entity.VirtualTextDisplay virtualHologram = null;
     private NpcSkin skin;
     private final String defaultSkin = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTI2NjY0YjEzYzcxN2Y1MGEwY2ZlODhlYzBkOGRiZmE5MWFlY2FhYjRjYjhiNDU5ZTRmM2UzMmVmYzhmNmNhYSJ9fX0=";
-    private static final float HEAD_Y = 1.385f;
+    private static final float HEAD_Y = 1.886f;
     private static final float TORSO_UPPER_Y = 1.386f;
     private static final float TORSO_LOWER_Y_OFFSET = -0.5f;
-    private static final float ARM_Y = 1.266f;
-    private static final float ARM_LOWER_Y_OFFSET = -0.38f;
-    private static final float ARM_X_OFFSET = 0.255f;
+    private static final float ARM_Y = 1.386f;
+    private static final float ARM_LOWER_Y_OFFSET = -0.5f;
+    private static final float ARM_X_OFFSET = 0.375f;
     private static final float LEG_Y = 0.636f;
     private static final float LEG_LOWER_Y_OFFSET = -0.5f;
     private static final float LEG_X_OFFSET = 0.125f;
@@ -570,8 +570,10 @@ public class NpcEntity {
         setGlobalRotation(0f, 0f, 0f);
         for (ItemPart part : parts.values()) {
             part.setRotation(0f, 0f, 0f);
+            part.setCustomOffset(0f, 0f, 0f);
         }
         setOffset(EditorTarget.GLOBAL, 0f, 0f, 0f);
+        updateTransforms();
         sendMetadataUpdateToAllViewers();
     }
 
