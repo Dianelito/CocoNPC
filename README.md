@@ -118,6 +118,7 @@ Since we use Vanilla Display Entities, models must be based on standard **Player
 | `/coconpc viewdistance [dist]` | Gets or sets render distance. | `CocoNPC.viewdistance` |
 | `/coconpc setkey <key>` | Sets MineSkin API key. | `CocoNPC.admin` |
 | `/coconpc reload` | Reloads configs and animations. | `CocoNPC.reload` |
+| `/coconpc mob` | Commands for spawning and managing 3D-model NPCs. | `CocoNPC.reload` |
 
 ---
 
