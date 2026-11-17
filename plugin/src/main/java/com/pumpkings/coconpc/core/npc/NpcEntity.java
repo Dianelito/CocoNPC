@@ -570,8 +570,10 @@ public class NpcEntity {
         setGlobalRotation(0f, 0f, 0f);
         for (ItemPart part : parts.values()) {
             part.setRotation(0f, 0f, 0f);
+            part.setCustomOffset(0f, 0f, 0f);
         }
         setOffset(EditorTarget.GLOBAL, 0f, 0f, 0f);
+        updateTransforms();
         sendMetadataUpdateToAllViewers();
     }
 
