@@ -71,7 +71,11 @@ public final class MobDefinitionLoader {
         config.options().setHeader(List.of(
                 "CocoNPC custom .bbmodel mobs.",
                 "Drop .bbmodel files in plugins/CocoNPC/mobs and run /coconpc mob reload.",
-                "Every file gets a section below the first time it is found."));
+                "Every file gets a section below the first time it is found.",
+                "Optional per-mob settings:",
+                "  actions: list of NPC-style actions run on right-click.",
+                "  cooldown: per-player interaction cooldown in seconds.",
+                "  animation: animation played once when the mob spawns."));
 
         List<Path> models = findModels();
         boolean dirty = false;
@@ -182,6 +186,10 @@ public final class MobDefinitionLoader {
 
             MobAnimationSet animationSet = readAnimations(section);
 
+            List<String> actions = section.getStringList("actions");
+            double interactionCooldown = section.getDouble("cooldown", 0.0);
+            String defaultAnimation = section.getString("animation", null);
+
             MobDefinition.Builder builder = MobDefinition.builder(id, driverType, model)
                     .scale(scale)
                     .yawOffset(yawOffset)
@@ -197,6 +205,9 @@ public final class MobDefinitionLoader {
                     .teleportDuration(teleportDuration)
                     .reanchorDistance(reanchor)
                     .animationSet(animationSet)
+                    .actions(actions)
+                    .interactionCooldown(interactionCooldown)
+                    .defaultAnimation(defaultAnimation)
                     .modelPath(path.toAbsolutePath().normalize());
 
             if (maxHealth > 0.0) {
@@ -277,6 +288,8 @@ public final class MobDefinitionLoader {
         section.set("animations.hurt-flash-ticks", 6);
         section.set("animations.additive-rotation", false);
         section.set("animations.attack-on-aggro", true);
+        section.set("actions", new ArrayList<String>());
+        section.set("cooldown", 0.0);
     }
 
     private String relativeName(Path path) {

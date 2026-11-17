@@ -25,6 +25,11 @@
 #       enabled: true
 #       width: 0.9
 #       height: 1.8
+#     actions:                   # NPC-style actions run on right-click
+#       - "[message] Hello!"
+#       - "[mob_animate] greet loop"
+#     cooldown: 3.0              # per-player interaction cooldown in seconds
+#     animation: greet           # optional one-shot played when it spawns
 #     animations:
 #       idle: idle
 #       walk: walk

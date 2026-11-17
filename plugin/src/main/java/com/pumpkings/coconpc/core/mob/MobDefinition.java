@@ -10,10 +10,13 @@ import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -46,6 +49,9 @@ public final class MobDefinition {
     private final Path modelPath;
     private final Consumer<LivingEntity> driverInitializer;
     private final Consumer<Player> interactionHandler;
+    private final List<String> actions;
+    private final double interactionCooldown;
+    private final String defaultAnimation;
 
     private MobDefinition(Builder builder, Map<MobAnimationState, BbAnimation> clips) {
         this.id = builder.id;
@@ -76,6 +82,9 @@ public final class MobDefinition {
         this.modelPath = builder.modelPath;
         this.driverInitializer = builder.driverInitializer;
         this.interactionHandler = builder.interactionHandler;
+        this.actions = Collections.unmodifiableList(new ArrayList<>(builder.actions));
+        this.interactionCooldown = builder.interactionCooldown;
+        this.defaultAnimation = builder.defaultAnimation;
     }
 
     public static Builder builder(String id, EntityType driverType, BbModel model) {
@@ -103,6 +112,11 @@ public final class MobDefinition {
         if (clips.get(MobAnimationState.WALK) == null) {
             logger.warning("[CocoNPC] Mob '" + id + "' has no walk animation ("
                     + animationSet.getName(MobAnimationState.WALK) + ").");
+        }
+        if (defaultAnimation != null && !defaultAnimation.isBlank()
+                && model.findAnimation(defaultAnimation) == null) {
+            logger.warning("[CocoNPC] Mob '" + id + "' sets animation '"
+                    + defaultAnimation + "' but the model has no such animation.");
         }
     }
 
@@ -222,6 +236,26 @@ public final class MobDefinition {
         return interactionHandler;
     }
 
+    public List<String> getActions() {
+        return actions;
+    }
+
+    public double getInteractionCooldown() {
+        return interactionCooldown;
+    }
+
+    public String getDefaultAnimation() {
+        return defaultAnimation;
+    }
+
+    public boolean hasAnimation(String name) {
+        return model != null && model.findAnimation(name) != null;
+    }
+
+    public Set<String> getAnimationNames() {
+        return model != null ? model.getAnimations().keySet() : Collections.emptySet();
+    }
+
     public static final class Builder {
         private final String id;
         private final EntityType driverType;
@@ -250,6 +284,9 @@ public final class MobDefinition {
         private Path modelPath;
         private Consumer<LivingEntity> driverInitializer;
         private Consumer<Player> interactionHandler;
+        private List<String> actions = new ArrayList<>();
+        private double interactionCooldown;
+        private String defaultAnimation;
 
         private Builder(String id, EntityType driverType, BbModel model) {
             this.id = Objects.requireNonNull(id, "id");
@@ -369,6 +406,30 @@ public final class MobDefinition {
 
         public Builder interactionHandler(Consumer<Player> handler) {
             this.interactionHandler = handler;
+            return this;
+        }
+
+        public Builder actions(List<String> actions) {
+            this.actions = new ArrayList<>();
+            if (actions != null) {
+                for (String action : actions) {
+                    if (action != null && !action.isBlank()) {
+                        this.actions.add(action.trim());
+                    }
+                }
+            }
+            return this;
+        }
+
+        public Builder interactionCooldown(double seconds) {
+            this.interactionCooldown = Math.max(0.0, seconds);
+            return this;
+        }
+
+        public Builder defaultAnimation(String animationName) {
+            this.defaultAnimation = animationName != null && !animationName.isBlank()
+                    ? animationName.trim()
+                    : null;
             return this;
         }
 

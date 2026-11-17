@@ -40,6 +40,9 @@ public class MobCommand extends SubCommand {
             case "remove", "delete" -> remove(player, args);
             case "reload" -> reload(player);
             case "info" -> info(player, args);
+            case "animate" -> animate(player, args);
+            case "stopanim", "stop" -> stopAnimation(player, args);
+            case "tp", "teleport" -> teleport(player, args);
             default -> Message.MOB_USAGE.send(plugin, player);
         }
     }
@@ -150,6 +153,154 @@ public class MobCommand extends SubCommand {
                 "{amount}", String.valueOf(plugin.getMobRegistry().getDefinitionCount()));
     }
 
+    private void animate(Player player, String[] args) {
+        if (args.length < 4) {
+            Message.MOB_ANIMATE_USAGE.send(plugin, player);
+            return;
+        }
+
+        String target = args[2];
+        String animation = args[3];
+        boolean loop = args.length > 4 && isLoopToken(args[4]);
+
+        List<CustomMob> mobs = resolveTargets(player, target);
+        if (mobs.isEmpty()) {
+            Message.MOB_NO_ACTIVE.send(plugin, player, "{id}", target);
+            return;
+        }
+
+        int played = 0;
+        String missingMob = null;
+        for (CustomMob mob : mobs) {
+            if (!mob.hasCustomAnimation(animation)) {
+                missingMob = mob.getDefinition().getId();
+                continue;
+            }
+            if (mob.playCustomAnimation(animation, loop)) {
+                played++;
+            }
+        }
+
+        if (played > 0) {
+            Message.MOB_ANIMATE_SUCCESS.send(plugin, player,
+                    "{animation}", animation,
+                    "{amount}", String.valueOf(played));
+        } else if (missingMob != null) {
+            Message.MOB_ANIMATION_UNKNOWN.send(plugin, player,
+                    "{id}", missingMob,
+                    "{animation}", animation);
+        } else {
+            Message.MOB_ANIMATE_FAILED.send(plugin, player, "{animation}", animation);
+        }
+    }
+
+    private void stopAnimation(Player player, String[] args) {
+        if (args.length < 3) {
+            Message.MOB_STOPANIM_USAGE.send(plugin, player);
+            return;
+        }
+
+        String target = args[2];
+        List<CustomMob> mobs = resolveTargets(player, target);
+        if (mobs.isEmpty()) {
+            Message.MOB_NO_ACTIVE.send(plugin, player, "{id}", target);
+            return;
+        }
+
+        int stopped = 0;
+        for (CustomMob mob : mobs) {
+            if (mob.stopCustomAnimation()) {
+                stopped++;
+            }
+        }
+
+        if (stopped > 0) {
+            Message.MOB_STOPANIM_SUCCESS.send(plugin, player,
+                    "{amount}", String.valueOf(stopped));
+        } else {
+            Message.MOB_STOPANIM_NONE.send(plugin, player, "{id}", target);
+        }
+    }
+
+    private void teleport(Player player, String[] args) {
+        if (args.length < 3) {
+            Message.MOB_TP_USAGE.send(plugin, player);
+            return;
+        }
+
+        String target = args[2];
+        CustomMob mob = resolveNearest(player, target);
+        if (mob == null) {
+            Message.MOB_NO_ACTIVE.send(plugin, player, "{id}", target);
+            return;
+        }
+
+        String id = mob.getDefinition().getId();
+        if (mob.teleportTo(player.getLocation())) {
+            Message.MOB_TP_SUCCESS.send(plugin, player, "{id}", id);
+        } else {
+            Message.MOB_TP_FAILED.send(plugin, player, "{id}", id);
+        }
+    }
+
+    private List<CustomMob> resolveTargets(Player player, String target) {
+        if (target == null || target.isBlank()) return List.of();
+
+        if (target.equalsIgnoreCase("nearest")) {
+            CustomMob nearest = plugin.getMobRegistry().getNearest(player.getLocation());
+            return nearest != null ? List.of(nearest) : List.of();
+        }
+
+        if (target.startsWith("#")) {
+            try {
+                CustomMob mob = plugin.getMobRegistry()
+                        .getByInstance(java.util.UUID.fromString(target.substring(1)));
+                return mob != null ? List.of(mob) : List.of();
+            } catch (IllegalArgumentException exception) {
+                return List.of();
+            }
+        }
+
+        MobDefinition definition = plugin.getMobRegistry().getDefinition(target);
+        if (definition == null) return List.of();
+
+        List<CustomMob> matches = new ArrayList<>();
+        for (CustomMob mob : plugin.getMobRegistry().getMobs()) {
+            if (mob.getDefinition().getId().equals(definition.getId())) {
+                matches.add(mob);
+            }
+        }
+        return matches;
+    }
+
+    private CustomMob resolveNearest(Player player, String target) {
+        List<CustomMob> candidates = resolveTargets(player, target);
+        if (candidates.isEmpty()) return null;
+
+        Location origin = player.getLocation();
+        CustomMob nearest = null;
+        double bestDistance = Double.MAX_VALUE;
+
+        for (CustomMob mob : candidates) {
+            Location location = mob.getLocation();
+            if (location == null || location.getWorld() != origin.getWorld()) continue;
+
+            double distance = location.distanceSquared(origin);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                nearest = mob;
+            }
+        }
+        return nearest;
+    }
+
+    private static boolean isLoopToken(String token) {
+        return token.equalsIgnoreCase("loop")
+                || token.equalsIgnoreCase("true")
+                || token.equalsIgnoreCase("yes")
+                || token.equals("1");
+    }
+
     private void info(Player player, String[] args) {
         if (args.length < 3) {
             Message.MOB_INFO_USAGE.send(plugin, player);
@@ -177,6 +328,10 @@ public class MobCommand extends SubCommand {
         line(player, "Marker", String.valueOf(definition.isMarker()));
         line(player, "Scale", String.valueOf(definition.getScale()));
         line(player, "Yaw offset", String.valueOf(definition.getYawOffset()));
+        line(player, "Actions", String.valueOf(definition.getActions().size()));
+        line(player, "Cooldown", definition.getInteractionCooldown() + "s");
+        line(player, "Default animation", definition.getDefaultAnimation() != null
+                ? definition.getDefaultAnimation() : "none");
         line(player, "Textures", status(definition, plugin.getMobTextureService()));
         line(player, "Spawned", String.valueOf(plugin.getMobRegistry()
                 .countMobs(definition.getId())));

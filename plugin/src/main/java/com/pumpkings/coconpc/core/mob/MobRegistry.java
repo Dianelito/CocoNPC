@@ -257,6 +257,36 @@ public final class MobRegistry {
         return Collections.unmodifiableList(activeMobs);
     }
 
+    /**
+     * Returns the closest attached custom mob to the given location, or
+     * {@code null} when none of them live in that world.
+     */
+    public CustomMob getNearest(Location location) {
+        if (location == null || location.getWorld() == null) return null;
+
+        CustomMob nearest = null;
+        double bestDistance = Double.MAX_VALUE;
+
+        for (CustomMob mob : activeMobs) {
+            if (mob == null || !mob.isAttached() || mob.isCleaned()) continue;
+
+            LivingEntity driver = mob.getDriver();
+            if (driver == null || !driver.isValid()) continue;
+
+            Location driverLocation = driver.getLocation();
+            if (driverLocation == null || driverLocation.getWorld() != location.getWorld()) {
+                continue;
+            }
+
+            double distance = driverLocation.distanceSquared(location);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                nearest = mob;
+            }
+        }
+        return nearest;
+    }
+
     public MobTicker getTicker() {
         return ticker;
     }

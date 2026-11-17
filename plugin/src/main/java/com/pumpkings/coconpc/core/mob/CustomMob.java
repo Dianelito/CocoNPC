@@ -21,6 +21,11 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -38,6 +43,7 @@ public final class CustomMob {
     private ModelRig rig;
     private AnimationController controller;
     private Interaction interaction;
+    private volatile List<String> instanceActions;
 
     private boolean attached;
     private boolean dying;
@@ -191,6 +197,9 @@ public final class CustomMob {
         rig = new ModelRig(plugin, definition, keys, instanceId, location);
         rig.spawn();
         controller = new AnimationController(rig, definition);
+        if (definition.getDefaultAnimation() != null) {
+            controller.playCustomAnimation(definition.getDefaultAnimation(), false);
+        }
         rig.apply(location, location.getYaw());
 
         if (definition.isInteractionEnabled()) {
@@ -481,12 +490,181 @@ public final class CustomMob {
         return !cleaned && !dying && controller != null && controller.triggerAttack();
     }
 
+    /**
+     * Replaces the actions of this instance. Passing {@code null} falls back to
+     * the actions configured in the definition.
+     */
+    public void setActions(List<String> actions) {
+        if (actions == null) {
+            this.instanceActions = null;
+            return;
+        }
+        List<String> copy = new ArrayList<>();
+        for (String action : actions) {
+            if (action != null && !action.isBlank()) {
+                copy.add(action.trim());
+            }
+        }
+        this.instanceActions = Collections.unmodifiableList(copy);
+    }
+
+    public List<String> getActions() {
+        List<String> own = instanceActions;
+        return own != null ? own : definition.getActions();
+    }
+
+    public boolean playCustomAnimation(String name, boolean loop) {
+        if (cleaned || dying || controller == null) return false;
+        return controller.playCustomAnimation(name, loop);
+    }
+
+    public boolean stopCustomAnimation() {
+        if (cleaned || dying || controller == null) return false;
+        return controller.stopCustomAnimation();
+    }
+
+    public Set<String> getCustomAnimationNames() {
+        if (controller != null) {
+            return controller.getCustomAnimationNames();
+        }
+        return Collections.unmodifiableSet(
+                new java.util.LinkedHashSet<>(definition.getAnimationNames()));
+    }
+
+    public boolean hasCustomAnimation(String name) {
+        if (controller != null) {
+            return controller.hasCustomAnimation(name);
+        }
+        return definition.hasAnimation(name);
+    }
+
+    public String getCurrentAnimationName() {
+        return controller != null ? controller.getCurrentAnimationName() : null;
+    }
+
+    public Location getLocation() {
+        return driver != null ? driver.getLocation() : null;
+    }
+
+    /**
+     * Moves the driver (and therefore the whole model) to the given location on
+     * its owning region thread. Works for static ARMOR_STAND drivers too.
+     */
+    public boolean teleportTo(Location location) {
+        if (cleaned || driver == null || location == null) return false;
+
+        LivingEntity entity = driver;
+        Runnable move = () -> {
+            entity.teleport(location);
+            lastX = location.getX();
+            lastZ = location.getZ();
+        };
+
+        try {
+            return entity.getScheduler().run(plugin, task -> move.run(), null) != null;
+        } catch (RuntimeException exception) {
+            move.run();
+            return true;
+        }
+    }
+
     void onInteraction(Player player, EquipmentSlot hand) {
-        if (cleaned || dying) return;
+        if (cleaned || dying || player == null) return;
+        // Clients fire the event once per hand; only the main hand should run
+        // the actions to avoid executing them twice.
+        if (hand == EquipmentSlot.OFF_HAND) return;
+
+        List<String> actions = getActions();
+        if (actions != null && !actions.isEmpty()) {
+            double cooldown = definition.getInteractionCooldown();
+            boolean allowed = true;
+            if (cooldown > 0.0 && plugin.getCooldownManager() != null) {
+                allowed = plugin.getCooldownManager().tryCooldown(player,
+                        interactionCooldownKey(), formatCooldown(cooldown));
+            }
+            if (!allowed) return;
+
+            if (plugin.getActionsManager() != null) {
+                plugin.getActionsManager().runActions(player,
+                        bindSelfActions(actions), actionCooldownKey());
+            }
+        }
+
         Consumer<Player> handler = definition.getInteractionHandler();
         if (handler != null) {
             handler.accept(player);
         }
+    }
+
+    private String interactionCooldownKey() {
+        return "mob-interact:" + instanceId;
+    }
+
+    private String actionCooldownKey() {
+        return "mob:" + instanceId;
+    }
+
+    private static String formatCooldown(double seconds) {
+        return Math.max(1L, (long) Math.ceil(seconds)) + "s";
+    }
+
+    /**
+     * Binds mob-scoped animate tags to this exact instance:
+     * {@code [animate] greet} and {@code [mob_animate] greet true} become
+     * {@code [mob_animate] #<instance> greet true}, so the ActionsManager can
+     * dispatch them without knowing which mob triggered the click.
+     */
+    private List<String> bindSelfActions(List<String> actions) {
+        List<String> bound = new ArrayList<>(actions.size());
+        for (String raw : actions) {
+            if (raw == null) continue;
+
+            String trimmed = raw.trim();
+            String lower = trimmed.toLowerCase(Locale.ROOT);
+
+            if (lower.startsWith("[animate]")) {
+                String rest = trimmed.substring("[animate]".length()).trim();
+                bound.add(selfAnimate(rest));
+                continue;
+            }
+
+            if (lower.startsWith("[mob_animate]")) {
+                String rest = trimmed.substring("[mob_animate]".length()).trim();
+                String[] tokens = rest.isEmpty() ? new String[0] : rest.split("\\s+");
+
+                if (tokens.length > 0 && tokens[0].equalsIgnoreCase("self")) {
+                    String tail = rest.substring(tokens[0].length()).trim();
+                    bound.add(selfAnimate(tail));
+                    continue;
+                }
+                if (tokens.length == 0 || tokens[0].startsWith("#")) {
+                    bound.add(trimmed);
+                    continue;
+                }
+                if (tokens.length == 1 || (tokens.length == 2 && isLoopToken(tokens[1]))) {
+                    bound.add(selfAnimate(rest));
+                    continue;
+                }
+                bound.add(trimmed);
+                continue;
+            }
+
+            bound.add(raw);
+        }
+        return bound;
+    }
+
+    private String selfAnimate(String argument) {
+        return "[mob_animate] #" + instanceId
+                + (argument == null || argument.isBlank() ? "" : " " + argument.trim());
+    }
+
+    private static boolean isLoopToken(String token) {
+        return token.equalsIgnoreCase("loop")
+                || token.equalsIgnoreCase("true")
+                || token.equalsIgnoreCase("false")
+                || token.equals("1")
+                || token.equals("0");
     }
 
     public UUID getInstanceId() {

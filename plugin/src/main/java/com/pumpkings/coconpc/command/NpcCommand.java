@@ -22,10 +22,10 @@ public class NpcCommand implements BasicCommand {
     private final Map<String, SubCommand> handlers = new LinkedHashMap<>();
 
     public static final List<String> ACTION_TYPES = List.of(
-            "message", "console", "player", "chat", "broadcast",
+            "message", "console", "command", "player", "chat", "broadcast",
             "give_exp", "take_exp", "server", "title", "subtitle",
             "sound", "teleport", "actionbar", "potion", "heal", "feed",
-            "give_item", "take_item", "animate",
+            "give_item", "take_item", "animate", "mob_animate",
             "require_permission", "require_money", "cooldown");
 
     public static final Map<String, String> PERMISSIONS = Map.ofEntries(
@@ -136,7 +136,7 @@ public class NpcCommand implements BasicCommand {
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc skin <gray><id> <skin> <dark_gray>- <gray>Change NPC skin"));
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc preload <dark_gray>- <gray>Preload local skins"));
         player.sendMessage(mm("<dark_gray> » <yellow>/coconpc setkey <gray><key> <dark_gray>- <gray>Set the MineSkin API key"));
-        player.sendMessage(mm("<dark_gray> » <yellow>/coconpc mob <list|spawn|remove|reload|info> <gray>[id] <dark_gray>- <gray>Manage .bbmodel mobs"));
+        player.sendMessage(mm("<dark_gray> » <yellow>/coconpc mob <gray><list|spawn|remove|reload|info|animate|stopanim|tp> <gray>[id] <dark_gray>- <gray>Manage .bbmodel mobs"));
     }
 
     private List<String> skinSuggestions(String prefix) {
@@ -172,6 +172,45 @@ public class NpcCommand implements BasicCommand {
                 .collect(Collectors.toList());
     }
 
+    private List<String> mobTargetSuggestions(String prefix) {
+        List<String> options = new ArrayList<>();
+        options.add("nearest");
+        options.addAll(mobIdSuggestions(prefix));
+        return filter(options, prefix);
+    }
+
+    private List<String> mobAnimationSuggestions(CommandSourceStack commandSourceStack,
+                                                 String target, String prefix) {
+        if (target == null || target.isBlank()) return List.of();
+
+        com.pumpkings.coconpc.core.mob.MobRegistry registry = plugin.getMobRegistry();
+        if (registry == null) return List.of();
+
+        Collection<String> names = List.of();
+
+        if (target.equalsIgnoreCase("nearest")) {
+            if (commandSourceStack.getSender() instanceof Player player) {
+                com.pumpkings.coconpc.core.mob.CustomMob mob = registry.getNearest(player.getLocation());
+                if (mob != null) names = mob.getCustomAnimationNames();
+            }
+        } else if (target.startsWith("#")) {
+            try {
+                com.pumpkings.coconpc.core.mob.CustomMob mob = registry.getByInstance(
+                        java.util.UUID.fromString(target.substring(1)));
+                if (mob != null) names = mob.getCustomAnimationNames();
+            } catch (IllegalArgumentException ignored) {
+                // Invalid instance uuid: no suggestions.
+            }
+        } else {
+            com.pumpkings.coconpc.core.mob.MobDefinition definition = registry.getDefinition(target);
+            if (definition != null) {
+                names = definition.getAnimationNames();
+            }
+        }
+
+        return filter(new ArrayList<>(names), prefix);
+    }
+
     @Override
     public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
         if (args.length <= 1) {
@@ -189,7 +228,8 @@ public class NpcCommand implements BasicCommand {
         if (args.length == 2) {
             return switch (sub) {
                 case "viewdistance" -> filter(List.of("16", "32", "48", "64", "80"), args[1]);
-                case "mob" -> filter(List.of("list", "spawn", "remove", "reload", "info"), args[1]);
+                case "mob" -> filter(List.of("list", "spawn", "remove", "reload", "info",
+                        "animate", "stopanim", "tp"), args[1]);
                 case "create", "spawn" -> {
                     int nextId = 1;
                     while (getNpcById(String.valueOf(nextId)) != null) nextId++;
@@ -220,6 +260,10 @@ public class NpcCommand implements BasicCommand {
                         options.add("all");
                         yield filter(options, args[2]);
                     }
+                    if (mobAction.equals("animate") || mobAction.equals("stopanim")
+                            || mobAction.equals("tp") || mobAction.equals("teleport")) {
+                        yield mobTargetSuggestions(args[2]);
+                    }
                     yield List.of();
                 }
                 default -> List.of();
@@ -231,8 +275,23 @@ public class NpcCommand implements BasicCommand {
                 case "item", "equip" -> filter(List.of("clear"), args[3]);
                 case "action" -> suggestActionArg4(args);
                 case "create", "spawn" -> filter(List.of("0.5", "1.0", "1.5", "2.0"), args[3]);
+                case "mob" -> {
+                    String mobAction = args[1].toLowerCase();
+                    if (mobAction.equals("animate")) {
+                        yield mobAnimationSuggestions(commandSourceStack, args[2], args[3]);
+                    }
+                    yield List.of();
+                }
                 default -> List.of();
             };
+        }
+
+        if (args.length == 5 && sub.equals("mob")) {
+            String mobAction = args[1].toLowerCase();
+            if (mobAction.equals("animate")) {
+                return filter(List.of("loop", "true", "false"), args[4]);
+            }
+            return List.of();
         }
 
         if (args.length == 5 && sub.equals("action") && args[2].equalsIgnoreCase("add")) {
@@ -246,6 +305,9 @@ public class NpcCommand implements BasicCommand {
                 List<String> options = new ArrayList<>(plugin.getAnimationManager().getAvailableAnimationNames());
                 options.add("stop");
                 return filter(options, args[5]);
+            }
+            if (type.equals("mob_animate")) {
+                return mobAnimationSuggestions(commandSourceStack, args[4], args[5]);
             }
             if (type.equals("sound")) {
                 return filter(List.of("1.0", "0.5", "2.0"), args[5]);
@@ -261,6 +323,9 @@ public class NpcCommand implements BasicCommand {
         if (args.length == 7 && sub.equals("action") && args[2].equalsIgnoreCase("add")) {
             String type = args[3].toLowerCase();
             if (type.startsWith("[") && type.endsWith("]")) type = type.substring(1, type.length() - 1);
+            if (type.equals("mob_animate")) {
+                return filter(List.of("loop", "true", "false"), args[6]);
+            }
             if (type.equals("sound")) {
                 return filter(List.of("1.0", "0.8", "1.2", "1.5"), args[6]);
             }
@@ -308,6 +373,9 @@ public class NpcCommand implements BasicCommand {
         }
         if (type.equals("animate")) {
             return npcIdSuggestions(args[4]);
+        }
+        if (type.equals("mob_animate")) {
+            return mobTargetSuggestions(args[4]);
         }
         if (type.equals("sound")) {
             return Arrays.stream(org.bukkit.Sound.values())
