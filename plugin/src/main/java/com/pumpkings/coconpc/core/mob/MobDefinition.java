@@ -24,7 +24,7 @@ public final class MobDefinition {
     private final String id;
     private final EntityType driverType;
     private final BbModel model;
-    private final double scale;
+    private volatile double scale;
     private final float yawOffset;
     private final MobAnimationSet animationSet;
     private final MobVisualPalette palette;
@@ -49,7 +49,7 @@ public final class MobDefinition {
     private final Path modelPath;
     private final Consumer<LivingEntity> driverInitializer;
     private final Consumer<Player> interactionHandler;
-    private final List<String> actions;
+    private volatile List<String> actions;
     private final double interactionCooldown;
     private final String defaultAnimation;
 
@@ -134,6 +134,15 @@ public final class MobDefinition {
 
     public double getScale() {
         return scale;
+    }
+
+    /**
+     * Updates the live scale. Every rig reads this value on each tick, so all
+     * active mobs using this definition resize without rebuilding their
+     * displays or textures.
+     */
+    public void setScale(double scale) {
+        this.scale = Math.max(0.0001, Math.min(10.0, scale));
     }
 
     public float getYawOffset() {
@@ -238,6 +247,22 @@ public final class MobDefinition {
 
     public List<String> getActions() {
         return actions;
+    }
+
+    /**
+     * Replaces the live action list. Instances without their own override run
+     * these actions on right-click immediately.
+     */
+    public void setActions(List<String> actions) {
+        List<String> copy = new ArrayList<>();
+        if (actions != null) {
+            for (String action : actions) {
+                if (action != null && !action.isBlank()) {
+                    copy.add(action.trim());
+                }
+            }
+        }
+        this.actions = Collections.unmodifiableList(copy);
     }
 
     public double getInteractionCooldown() {

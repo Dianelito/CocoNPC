@@ -112,6 +112,18 @@ public final class CustomMob {
         }
     }
 
+    /**
+     * Points this instance at a definition whose mutable values (scale,
+     * actions...) changed. Displays are not rebuilt, so the model keeps its
+     * current textures and pose; {@link ModelRig} reads the new scale on the
+     * next tick.
+     */
+    void syncDefinition(MobDefinition updated) {
+        if (cleaned || updated == null) return;
+        if (!updated.getId().equalsIgnoreCase(definition.getId())) return;
+        this.definition = updated;
+    }
+
     private void migrateDriver(MobDefinition updated) {
         EntityType type = updated.getDriverType();
         if (!type.isSpawnable() || !type.isAlive() || type.getEntityClass() == null) {

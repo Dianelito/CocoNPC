@@ -151,8 +151,77 @@ public final class MobRegistry {
 
         for (CustomMob mob : new ArrayList<>(activeMobs)) {
             if (!mob.getDefinition().getId().equals(definition.getId())) continue;
-            runForMob(mob, () -> mob.refreshVisuals(definition));;
+            runForMob(mob, () -> mob.refreshVisuals(definition));
         }
+    }
+
+    /**
+     * Persists the action list in {@code mobs.yml}, updates the live definition
+     * and makes every active mob of that type pick it up. Displays are not
+     * rebuilt, so textures are preserved.
+     */
+    public boolean saveActions(String definitionId, List<String> actions) {
+        MobDefinition definition = getDefinition(definitionId);
+        if (definition == null) return false;
+
+        List<String> normalized = new ArrayList<>();
+        if (actions != null) {
+            for (String action : actions) {
+                if (action != null && !action.isBlank()) {
+                    normalized.add(action.trim());
+                }
+            }
+        }
+
+        if (plugin.getMobDefinitionLoader() == null
+                || !plugin.getMobDefinitionLoader().saveActions(definition.getId(), normalized)) {
+            return false;
+        }
+
+        definition.setActions(normalized);
+        applyLiveDefinition(definition.getId());
+        return true;
+    }
+
+    /**
+     * Persists a new scale in {@code mobs.yml} and applies it to the live
+     * definition. Rigs read the scale every tick, so no visuals are rebuilt.
+     */
+    public boolean saveScale(String definitionId, double scale) {
+        MobDefinition definition = getDefinition(definitionId);
+        if (definition == null) return false;
+
+        double clamped = Math.max(0.1, Math.min(10.0,
+                Math.round(scale * 100.0) / 100.0));
+
+        if (plugin.getMobDefinitionLoader() == null
+                || !plugin.getMobDefinitionLoader().saveScale(definition.getId(), clamped)) {
+            return false;
+        }
+
+        definition.setScale(clamped);
+        applyLiveDefinition(definition.getId());
+        return true;
+    }
+
+    /**
+     * Re-points every active mob of a definition at the registry's live
+     * instance so mutable values (actions, scale) are visible immediately.
+     */
+    public void applyLiveDefinition(String definitionId) {
+        MobDefinition definition = getDefinition(definitionId);
+        if (definition == null) return;
+
+        for (CustomMob mob : new ArrayList<>(activeMobs)) {
+            if (!mob.getDefinition().getId().equals(definition.getId())) continue;
+            runForMob(mob, () -> mob.syncDefinition(definition));
+        }
+    }
+
+    /** Removes a single live mob instance on its region thread. */
+    public void removeMob(CustomMob mob) {
+        if (mob == null || !activeMobs.contains(mob)) return;
+        runForMob(mob, () -> mob.cleanup(true));
     }
 
     public CustomMob spawn(String definitionId, Location location) {

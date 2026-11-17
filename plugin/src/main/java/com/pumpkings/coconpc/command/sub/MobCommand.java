@@ -1,17 +1,20 @@
 package com.pumpkings.coconpc.command.sub;
 
 import com.pumpkings.coconpc.CocoNPC;
+import com.pumpkings.coconpc.command.NpcCommand;
 import com.pumpkings.coconpc.command.SubCommand;
 import com.pumpkings.coconpc.core.config.Message;
 import com.pumpkings.coconpc.core.mob.CustomMob;
 import com.pumpkings.coconpc.core.mob.MobDefinition;
 import com.pumpkings.coconpc.core.mob.MobTextureService;
 import com.pumpkings.coconpc.core.mob.model.BbModel;
+import com.pumpkings.coconpc.menu.MobEditorMenu;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -43,6 +46,8 @@ public class MobCommand extends SubCommand {
             case "animate" -> animate(player, args);
             case "stopanim", "stop" -> stopAnimation(player, args);
             case "tp", "teleport" -> teleport(player, args);
+            case "edit", "menu" -> edit(player, args);
+            case "action", "actions" -> action(player, args);
             default -> Message.MOB_USAGE.send(plugin, player);
         }
     }
@@ -241,6 +246,152 @@ public class MobCommand extends SubCommand {
         } else {
             Message.MOB_TP_FAILED.send(plugin, player, "{id}", id);
         }
+    }
+
+    private void edit(Player player, String[] args) {
+        if (args.length < 3) {
+            Message.MOB_EDIT_USAGE.send(plugin, player);
+            return;
+        }
+
+        if (!MobEditorMenu.canEdit(player)) {
+            Message.NO_PERMISSION.send(plugin, player);
+            return;
+        }
+
+        CustomMob mob = resolveNearest(player, args[2]);
+        if (mob == null) {
+            Message.MOB_NO_ACTIVE.send(plugin, player, "{id}", args[2]);
+            return;
+        }
+
+        new MobEditorMenu(plugin, mob).open(player);
+        Message.MOB_EDITOR_OPENED.send(plugin, player,
+                "{id}", mob.getDefinition().getId());
+    }
+
+    private void action(Player player, String[] args) {
+        if (args.length < 4) {
+            sendMobActionHelp(player);
+            return;
+        }
+
+        MobDefinition definition = resolveDefinition(player, args[2]);
+        if (definition == null) {
+            Message.MOB_NOT_FOUND.send(plugin, player, "{id}", args[2]);
+            return;
+        }
+
+        String sub = args[3].toLowerCase();
+        String id = definition.getId();
+        List<String> currentActions = new ArrayList<>(definition.getActions());
+
+        switch (sub) {
+            case "list" -> {
+                if (currentActions.isEmpty()) {
+                    Message.MOB_ACTION_LIST_EMPTY.send(plugin, player);
+                    return;
+                }
+                Message.MOB_ACTION_LIST_HEADER.send(plugin, player, "{id}", id);
+                for (int i = 0; i < currentActions.size(); i++) {
+                    Message.MOB_ACTION_LIST_ENTRY.send(plugin, player,
+                            "{index}", String.valueOf(i + 1),
+                            "{action}", currentActions.get(i));
+                }
+            }
+            case "clear" -> {
+                if (plugin.getMobRegistry().saveActions(id, List.of())) {
+                    Message.MOB_ACTION_CLEARED.send(plugin, player, "{id}", id);
+                } else {
+                    Message.MOB_SAVE_FAILED.send(plugin, player, "{id}", id);
+                }
+            }
+            case "remove", "del", "delete" -> {
+                if (args.length < 5) {
+                    Message.MOB_ACTION_HELP_REMOVE.send(plugin, player);
+                    return;
+                }
+                try {
+                    int index = Integer.parseInt(args[4]);
+                    if (index < 1 || index > currentActions.size()) {
+                        Message.MOB_ACTION_INVALID_INDEX.send(plugin, player,
+                                "{index}", args[4]);
+                        return;
+                    }
+                    currentActions.remove(index - 1);
+                    if (plugin.getMobRegistry().saveActions(id, currentActions)) {
+                        Message.MOB_ACTION_REMOVED.send(plugin, player,
+                                "{index}", String.valueOf(index),
+                                "{id}", id);
+                    } else {
+                        Message.MOB_SAVE_FAILED.send(plugin, player, "{id}", id);
+                    }
+                } catch (NumberFormatException exception) {
+                    Message.INVALID_NUMBER.send(plugin, player, "{value}", args[4]);
+                }
+            }
+            case "add" -> {
+                if (args.length < 5) {
+                    Message.MOB_ACTION_HELP_ADD.send(plugin, player);
+                    return;
+                }
+
+                String type = args[4].toLowerCase();
+                if (type.startsWith("[") && type.endsWith("]")) {
+                    type = type.substring(1, type.length() - 1);
+                }
+                if (type.equals("connect")) type = "server";
+
+                if (!NpcCommand.ACTION_TYPES.contains(type)) {
+                    Message.MOB_ACTION_INVALID_TYPE.send(plugin, player, "{type}", args[4]);
+                    return;
+                }
+
+                String rest = String.join(" ", Arrays.copyOfRange(args, 5, args.length));
+                String fullAction = type.equals("animate")
+                        ? "[mob_animate] " + id + " " + rest
+                        : "[" + type + "] " + rest;
+                currentActions.add(fullAction);
+
+                if (plugin.getMobRegistry().saveActions(id, currentActions)) {
+                    Message.MOB_ACTION_ADDED.send(plugin, player,
+                            "{id}", id,
+                            "{index}", String.valueOf(currentActions.size()));
+                } else {
+                    Message.MOB_SAVE_FAILED.send(plugin, player, "{id}", id);
+                }
+            }
+            default -> sendMobActionHelp(player);
+        }
+    }
+
+    private void sendMobActionHelp(Player player) {
+        Message.MOB_ACTION_HELP_HEADER.send(plugin, player);
+        Message.MOB_ACTION_HELP_LIST.send(plugin, player);
+        Message.MOB_ACTION_HELP_ADD.send(plugin, player);
+        Message.MOB_ACTION_HELP_REMOVE.send(plugin, player);
+        Message.MOB_ACTION_HELP_CLEAR.send(plugin, player);
+    }
+
+    private MobDefinition resolveDefinition(Player player, String target) {
+        if (target == null || target.isBlank()) return null;
+
+        if (target.equalsIgnoreCase("nearest")) {
+            CustomMob mob = plugin.getMobRegistry().getNearest(player.getLocation());
+            return mob != null ? mob.getDefinition() : null;
+        }
+
+        if (target.startsWith("#")) {
+            try {
+                CustomMob mob = plugin.getMobRegistry()
+                        .getByInstance(java.util.UUID.fromString(target.substring(1)));
+                return mob != null ? mob.getDefinition() : null;
+            } catch (IllegalArgumentException exception) {
+                return null;
+            }
+        }
+
+        return plugin.getMobRegistry().getDefinition(target);
     }
 
     private List<CustomMob> resolveTargets(Player player, String target) {

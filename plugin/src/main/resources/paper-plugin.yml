@@ -36,6 +36,7 @@ permissions:
       CocoNPC.reload: true
       CocoNPC.animate: true
       CocoNPC.mob: true
+      CocoNPC.mob.edit: true
   CocoNPC.spawn:
     description: Spawn new NPCs.
     default: op
@@ -83,4 +84,7 @@ permissions:
     default: op
   CocoNPC.mob:
     description: Manage custom .bbmodel mobs.
+    default: op
+  CocoNPC.mob.edit:
+    description: Open the custom mob editor, by command or by shift-clicking a mob.
     default: op

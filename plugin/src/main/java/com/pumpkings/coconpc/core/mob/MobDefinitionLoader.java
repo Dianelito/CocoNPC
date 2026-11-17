@@ -68,14 +68,7 @@ public final class MobDefinitionLoader {
 
         List<MobDefinition> definitions = new ArrayList<>();
         YamlConfiguration config = YamlConfiguration.loadConfiguration(configFile);
-        config.options().setHeader(List.of(
-                "CocoNPC custom .bbmodel mobs.",
-                "Drop .bbmodel files in plugins/CocoNPC/mobs and run /coconpc mob reload.",
-                "Every file gets a section below the first time it is found.",
-                "Optional per-mob settings:",
-                "  actions: list of NPC-style actions run on right-click.",
-                "  cooldown: per-player interaction cooldown in seconds.",
-                "  animation: animation played once when the mob spawns."));
+        applyHeader(config);
 
         List<Path> models = findModels();
         boolean dirty = false;
@@ -119,6 +112,61 @@ public final class MobDefinitionLoader {
         plugin.getLogger().info("[CocoNPC] Loaded " + definitions.size()
                 + " custom mob definition(s) from " + folder.getName() + "/.");
         return definitions;
+    }
+
+    /**
+     * Persists the action list of a definition in {@code mobs.yml}.
+     *
+     * @return {@code true} when the file was written successfully
+     */
+    public boolean saveActions(String definitionId, List<String> actions) {
+        List<String> copy = new ArrayList<>();
+        if (actions != null) {
+            for (String action : actions) {
+                if (action != null && !action.isBlank()) {
+                    copy.add(action.trim());
+                }
+            }
+        }
+        return saveValue(definitionId, "actions", copy);
+    }
+
+    /**
+     * Persists the scale of a definition in {@code mobs.yml}.
+     *
+     * @return {@code true} when the file was written successfully
+     */
+    public boolean saveScale(String definitionId, double scale) {
+        return saveValue(definitionId, "scale",
+                Math.round(scale * 1000.0) / 1000.0);
+    }
+
+    private synchronized boolean saveValue(String definitionId, String key, Object value) {
+        if (definitionId == null || definitionId.isBlank()) return false;
+
+        try {
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(configFile);
+            applyHeader(config);
+            config.set("mobs." + definitionId + "." + key, value);
+            config.save(configFile);
+            return true;
+        } catch (IOException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "[CocoNPC] Could not save " + key + " for mob '"
+                            + definitionId + "' in mobs.yml", exception);
+            return false;
+        }
+    }
+
+    private static void applyHeader(YamlConfiguration config) {
+        config.options().setHeader(List.of(
+                "CocoNPC custom .bbmodel mobs.",
+                "Drop .bbmodel files in plugins/CocoNPC/mobs and run /coconpc mob reload.",
+                "Every file gets a section below the first time it is found.",
+                "Optional per-mob settings:",
+                "  actions: list of NPC-style actions run on right-click.",
+                "  cooldown: per-player interaction cooldown in seconds.",
+                "  animation: animation played once when the mob spawns."));
     }
 
     private List<Path> findModels() {
@@ -222,8 +270,7 @@ public final class MobDefinitionLoader {
         }
     }
 
-    private MobAnimationSet readAnimations(ConfigurationSection section) {
-        MobAnimationSet.Builder builder = MobAnimationSet.builder();
+    private MobAnimationSet readAnimations(ConfigurationSection section) {        MobAnimationSet.Builder builder = MobAnimationSet.builder();
         builder.idle(section.getString("animations.idle", "idle"));
         builder.walk(section.getString("animations.walk", "walk"));
         builder.attack(section.getString("animations.attack", "attack"));
