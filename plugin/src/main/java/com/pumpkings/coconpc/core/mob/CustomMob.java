@@ -175,12 +175,15 @@ public final class CustomMob {
      * Recreates every display with the visuals currently stored in the
      * definition. Runs on the driver's region thread.
      */
-    void refreshVisuals() {
+
+    void refreshVisuals(MobDefinition updated) {
         if (cleaned || !attached || driver == null || !driver.isValid()) return;
+        if (updated != null) {
+            this.definition = updated;
+        }
         detachVisuals();
         attachVisuals();
     }
-
     private void attachVisuals() {
         if (attached || driver == null) return;
 

@@ -218,10 +218,18 @@ public final class MobTextureGenerator {
         }
         if (uv == null || uv.length < 4) return null;
 
-        float scaleX = model.getTextureWidth() > 0f
-                ? atlas.getWidth() / model.getTextureWidth() : 1f;
-        float scaleY = model.getTextureHeight() > 0f
-                ? atlas.getHeight() / model.getTextureHeight() : 1f;
+        float scaleX;
+        float scaleY;
+        Texture texture = model.getTexture(face.getTexture());
+        if (texture != null && texture.getUvWidth() > 0f && texture.getUvHeight() > 0f) {
+            scaleX = atlas.getWidth() / texture.getUvWidth();
+            scaleY = atlas.getHeight() / texture.getUvHeight();
+        } else {
+            scaleX = model.getTextureWidth() > 0f
+                    ? atlas.getWidth() / model.getTextureWidth() : 1f;
+            scaleY = model.getTextureHeight() > 0f
+                    ? atlas.getHeight() / model.getTextureHeight() : 1f;
+        }
 
         float u1 = uv[0] * scaleX;
         float v1 = uv[1] * scaleY;

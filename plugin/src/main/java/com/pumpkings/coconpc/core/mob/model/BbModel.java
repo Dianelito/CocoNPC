@@ -123,13 +123,18 @@ public final class BbModel {
         private final String source;
         private final float width;
         private final float height;
+        private final float uvWidth;
+        private final float uvHeight;
 
-        Texture(String name, String uuid, String source, float width, float height) {
+        Texture(String name, String uuid, String source, float width, float height,
+                float uvWidth, float uvHeight) {
             this.name = name;
             this.uuid = uuid;
             this.source = source;
             this.width = width;
             this.height = height;
+            this.uvWidth = uvWidth;
+            this.uvHeight = uvHeight;
         }
 
         public String getName() {
@@ -150,6 +155,18 @@ public final class BbModel {
 
         public float getHeight() {
             return height;
+        }
+
+        /**
+         * Width of the UV space used by face coordinates. HD textures can use a
+         * UV space smaller than the image itself (for example 64 on a 128px PNG).
+         */
+        public float getUvWidth() {
+            return uvWidth > 0f ? uvWidth : width;
+        }
+
+        public float getUvHeight() {
+            return uvHeight > 0f ? uvHeight : height;
         }
 
         public boolean hasSource() {

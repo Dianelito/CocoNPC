@@ -230,6 +230,111 @@ class BbModelParserTest {
     }
 
     @Test
+    void resolvesBlockbenchFiveGroupsAndOutlinerReferences(@TempDir Path tempDir) throws Exception {
+        String json = """
+                {
+                  "meta": {"format_version": "5.0", "model_format": "free"},
+                  "name": "v5_mob",
+                  "resolution": {"width": 64, "height": 64},
+                  "textures": [{"name": "skin", "uuid": "tex", "uv_width": 32, "uv_height": 32}],
+                  "elements": [
+                    {
+                      "name": "torso", "uuid": "elem-torso",
+                      "from": [-4, 8, -2], "to": [4, 20, 2], "faces": {}
+                    },
+                    {
+                      "name": "head", "uuid": "elem-head",
+                      "from": [-4, 20, -4], "to": [4, 28, 4], "faces": {}
+                    }
+                  ],
+                  "groups": [
+                    {"name": "root", "uuid": "g-root", "origin": [0, 0, 0], "rotation": [0, 0, 0]},
+                    {"name": "body", "uuid": "g-body", "origin": [0, 10, 0], "rotation": [10, 0, 0]},
+                    {"name": "head", "uuid": "g-head", "origin": [0, 24, 0], "rotation": [0, 45, 0]}
+                  ],
+                  "outliner": [
+                    {
+                      "uuid": "g-root",
+                      "children": [
+                        {
+                          "uuid": "g-body",
+                          "children": [
+                            "elem-torso",
+                            {"uuid": "g-head", "children": ["elem-head"]}
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "animations": [
+                    {
+                      "name": "idle",
+                      "loop": "loop",
+                      "length": 1.0,
+                      "animators": {
+                        "g-head": {
+                          "name": "head",
+                          "type": "bone",
+                          "keyframes": [
+                            {"channel": "rotation", "time": 0,
+                             "data_points": [{"x": 0, "y": 45, "z": 0}]},
+                            {"channel": "position", "time": 1,
+                             "data_points": [{"x": 0, "y": 16, "z": 0}]}
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+                """;
+
+        Path file = tempDir.resolve("v5_mob.bbmodel");
+        Files.writeString(file, json, StandardCharsets.UTF_8);
+        Logger logger = Logger.getLogger("BbModelParserTest");
+        logger.setLevel(Level.OFF);
+
+        BbModel model = BbModelParser.parse(file, logger);
+        assertThat(model).isNotNull();
+
+        assertThat(model.getRoots()).hasSize(1);
+        BbModel.Bone root = model.getRoots().get(0);
+        assertThat(root.getName()).isEqualTo("root");
+        assertThat(root.getUuid()).isEqualTo("g-root");
+        assertVector(root.getOrigin(), 0f, 0f, 0f);
+
+        assertThat(root.getChildren()).hasSize(1);
+        BbModel.Bone body = root.getChildren().get(0);
+        assertThat(body.getName()).isEqualTo("body");
+        assertVector(body.getOrigin(), 0f, 10f, 0f);
+        assertVector(body.getRotation(), 10f, 0f, 0f);
+        assertThat(body.getCubes()).hasSize(1);
+        assertThat(body.getCubes().get(0).getName()).isEqualTo("torso");
+
+        BbModel.Bone head = body.getChildren().get(0);
+        assertThat(head.getName()).isEqualTo("head");
+        assertVector(head.getOrigin(), 0f, 24f, 0f);
+        assertVector(head.getRotation(), 0f, 45f, 0f);
+        assertThat(head.getCubes()).hasSize(1);
+        assertThat(head.getCubes().get(0).getName()).isEqualTo("head");
+
+        BbModel.Texture texture = model.getTexture("skin");
+        assertThat(texture).isNotNull();
+        assertThat(texture.getUvWidth()).isEqualTo(32f);
+        assertThat(texture.getUvHeight()).isEqualTo(32f);
+
+        BbAnimation animation = model.findAnimation("idle");
+        assertThat(animation).isNotNull();
+        assertThat(animation.getTracks()).hasSize(1);
+        BbAnimation.BoneTrack track = animation.getTracks().get(0);
+        assertThat(track.getBoneUuid()).isEqualTo("g-head");
+        assertThat(track.getBoneName()).isEqualTo("head");
+
+        Vector3f position = new Vector3f();
+        assertThat(track.samplePosition(1f, position)).isTrue();
+        assertVector(position, 0f, 1f, 0f);
+    }
+
+    @Test
     void resolvesAnimationNamesCaseInsensitively(@TempDir Path tempDir) throws Exception {
         BbModel model = parse(tempDir);
 

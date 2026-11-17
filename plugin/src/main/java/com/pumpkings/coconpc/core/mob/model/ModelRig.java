@@ -29,13 +29,6 @@ public final class ModelRig {
     private static final float PIXEL_SCALE = 1f / 16f;
     private static final Color FLASH_COLOR = Color.fromRGB(255, 40, 40);
 
-    /**
-     * The player-head model is a cube spanning -4..4 in X/Z, -8..0 in Y, then
-     * rotated 180 degrees around X and translated by (0.5, 0, 0.5) by the
-     * vanilla item model. Its final center, in item-space blocks, is therefore
-     * (0.5, 0.25, 0.5) with an edge length of 0.5 blocks (8 pixels).
-     */
-    private static final Vector3f HEAD_CENTER = new Vector3f(0.5f, 0.25f, 0.5f);
     private static final float HEAD_BASE_PIXELS = 8f;
     private static final float BLOCK_BASE_PIXELS = 16f;
 
@@ -139,31 +132,39 @@ public final class ModelRig {
         Vector3f center = cube.getCenter();
         Vector3f size = cube.getSize();
 
-        float base = visual != null && visual.isHead() ? HEAD_BASE_PIXELS : BLOCK_BASE_PIXELS;
+        boolean head = visual != null && visual.isHead();
+        boolean block = visual != null && visual.isBlock();
+        float base = head ? HEAD_BASE_PIXELS : BLOCK_BASE_PIXELS;
         float extraScale = visual != null ? visual.scale() : 1f;
+
+        float scaleX = Math.max(0.001f, size.x) / base * extraScale;
+        float scaleY = Math.max(0.001f, size.y) / base * extraScale;
+        float scaleZ = Math.max(0.001f, size.z) / base * extraScale;
 
         Matrix4f matrix = new Matrix4f()
                 .translation(
                         (center.x - pivot.x) * PIXEL_SCALE,
                         (center.y - pivot.y) * PIXEL_SCALE,
                         (center.z - pivot.z) * PIXEL_SCALE)
-                .scale(
-                        size.x / base * extraScale,
-                        size.y / base * extraScale,
-                        size.z / base * extraScale);
+                .scale(scaleX, scaleY, scaleZ);
 
-        if (visual != null && visual.isHead()) {
-            // Recenter the 8x8x8 head cube around the cube's own center.
-            matrix.translate(-HEAD_CENTER.x, -HEAD_CENTER.y, -HEAD_CENTER.z);
+        if (head) {
+            // In ItemDisplayTransform.HEAD, a PLAYER_HEAD spans X/Z: -0.25..0.25 (center 0),
+            // Y: -0.5..0.0 (center -0.25). Shift +0.25 in Y to center it at (0, 0, 0).
+            matrix.translate(0f, 0.25f, 0f);
+        } else if (block) {
+            // Block models span 0..1 with their corner at the display origin,
+            // so shift them by half a block before scaling to center them.
+            matrix.translate(-0.5f, -0.5f, -0.5f);
         }
         return matrix;
     }
 
     private static Quaternionf euler(Vector3f degrees) {
-        return new Quaternionf().rotationXYZ(
-                (float) Math.toRadians(degrees.x),
+        return new Quaternionf().rotationZYX(
+                (float) Math.toRadians(degrees.z),
                 (float) Math.toRadians(degrees.y),
-                (float) Math.toRadians(degrees.z));
+                (float) Math.toRadians(degrees.x));
     }
 
     public void spawn() {

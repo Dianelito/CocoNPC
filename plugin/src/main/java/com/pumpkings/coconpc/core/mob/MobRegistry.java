@@ -151,7 +151,7 @@ public final class MobRegistry {
 
         for (CustomMob mob : new ArrayList<>(activeMobs)) {
             if (!mob.getDefinition().getId().equals(definition.getId())) continue;
-            runForMob(mob, mob::refreshVisuals);
+            runForMob(mob, () -> mob.refreshVisuals(definition));;
         }
     }
 
@@ -365,7 +365,7 @@ public final class MobRegistry {
 
         List<CustomMob> snapshot = new ArrayList<>(activeMobs);
         for (CustomMob mob : snapshot) {
-            mob.cleanup(true);
+            mob.handleChunkUnload();
         }
 
         activeMobs.clear();

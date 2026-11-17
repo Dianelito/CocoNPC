@@ -64,11 +64,17 @@ public final class BbModelParser {
             List<JsonObject> elements = new ArrayList<>();
             readElements(root, elements, elementsByUuid);
 
+            // Blockbench 5.0 moved bone names, pivots and rest rotations out of
+            // the outliner and into a separate "groups" array. Index it first so
+            // outliner nodes (which only carry uuid + children) can resolve them.
+            Map<String, GroupData> groupsByUuid = readGroups(root);
+
             Node rootNode = new Node("root", null, new Vector3f(), new Vector3f());
             Map<String, Node> bonesByUuid = new HashMap<>();
             Set<String> consumedElements = new HashSet<>();
-            parseOutliner(root, rootNode, elementsByUuid, bonesByUuid, consumedElements,
-                    textures, textureWidth, textureHeight);
+            Set<String> visitedBones = new HashSet<>();
+            parseOutliner(root, rootNode, elementsByUuid, groupsByUuid, bonesByUuid,
+                    consumedElements, visitedBones, textures, textureWidth, textureHeight);
 
             if (rootNode.cubes.isEmpty() && rootNode.children.isEmpty()) {
                 for (JsonObject element : elements) {
@@ -111,9 +117,14 @@ public final class BbModelParser {
             String source = optString(texture, "source", optString(texture, "path", null));
             float width = optFloat(texture, "width", 0f);
             float height = optFloat(texture, "height", 0f);
+            // HD textures keep the UV space (for example 64) separate from the
+            // image size (for example 128). Face UVs are expressed in UV space.
+            float uvWidth = optFloat(texture, "uv_width", width);
+            float uvHeight = optFloat(texture, "uv_height", height);
 
             // Keep the first occurrence for duplicated names so face references stay stable.
-            textures.putIfAbsent(name, new BbModel.Texture(name, uuid, source, width, height));
+            textures.putIfAbsent(name, new BbModel.Texture(name, uuid, source,
+                    width, height, uvWidth, uvHeight));
             index++;
         }
     }
@@ -134,32 +145,63 @@ public final class BbModelParser {
         }
     }
 
+    private static Map<String, GroupData> readGroups(JsonObject root) {
+        Map<String, GroupData> groups = new HashMap<>();
+        JsonArray array = root.getAsJsonArray("groups");
+        if (array == null) return groups;
+
+        for (JsonElement element : array) {
+            if (!element.isJsonObject()) continue;
+            JsonObject object = element.getAsJsonObject();
+            String uuid = optString(object, "uuid", null);
+            if (uuid == null || groups.containsKey(uuid)) continue;
+
+            groups.put(uuid, new GroupData(
+                    optString(object, "name", null),
+                    readVectorOrNull(object, "origin"),
+                    readVectorOrNull(object, "rotation")));
+        }
+        return groups;
+    }
+
     private static void parseOutliner(JsonObject root, Node parent,
                                       Map<String, JsonObject> elementsByUuid,
+                                      Map<String, GroupData> groupsByUuid,
                                       Map<String, Node> bonesByUuid,
                                       Set<String> consumedElements,
+                                      Set<String> visitedBones,
                                       Map<String, BbModel.Texture> textures,
                                       float textureWidth, float textureHeight) {
-        JsonArray outliner = root.getAsJsonArray("outliner");
-        if (outliner == null) return;
+        JsonElement outliner = root.get("outliner");
+        if (outliner == null || outliner.isJsonNull()) return;
 
-        for (JsonElement element : outliner) {
-            parseOutlinerElement(element, parent, elementsByUuid, bonesByUuid, consumedElements,
+        // Older exports always use an array; accept a single root object too.
+        if (outliner.isJsonArray()) {
+            for (JsonElement element : outliner.getAsJsonArray()) {
+                parseOutlinerElement(element, parent, elementsByUuid, groupsByUuid,
+                        bonesByUuid, consumedElements, visitedBones,
+                        textures, textureWidth, textureHeight);
+            }
+        } else {
+            parseOutlinerElement(outliner, parent, elementsByUuid, groupsByUuid,
+                    bonesByUuid, consumedElements, visitedBones,
                     textures, textureWidth, textureHeight);
         }
     }
 
     private static void parseOutlinerElement(JsonElement element, Node parent,
                                              Map<String, JsonObject> elementsByUuid,
+                                             Map<String, GroupData> groupsByUuid,
                                              Map<String, Node> bonesByUuid,
                                              Set<String> consumedElements,
+                                             Set<String> visitedBones,
                                              Map<String, BbModel.Texture> textures,
                                              float textureWidth, float textureHeight) {
         if (element == null || element.isJsonNull()) return;
 
         if (element.isJsonPrimitive()) {
-            String uuid = element.getAsString();
-            addElement(uuid, parent, elementsByUuid, consumedElements, textures,
+            addReference(element.getAsString(), parent, elementsByUuid, groupsByUuid,
+                    bonesByUuid, consumedElements, visitedBones, textures,
                     textureWidth, textureHeight);
             return;
         }
@@ -167,6 +209,7 @@ public final class BbModelParser {
         if (!element.isJsonObject()) return;
         JsonObject object = element.getAsJsonObject();
 
+        // Inline cube definitions (rare, but accepted by Blockbench).
         if (object.has("from") && object.has("to")) {
             String uuid = optString(object, "uuid", null);
             if (uuid != null && !consumedElements.add(uuid)) return;
@@ -175,17 +218,32 @@ public final class BbModelParser {
             return;
         }
 
-        if (!object.has("children") && !object.has("name") && object.has("uuid")) {
-            String uuid = object.get("uuid").getAsString();
-            addElement(uuid, parent, elementsByUuid, consumedElements, textures,
-                    textureWidth, textureHeight);
+        String uuid = optString(object, "uuid", null);
+        GroupData group = uuid != null ? groupsByUuid.get(uuid) : null;
+
+        // A bare uuid with no group metadata and no children is an element
+        // reference (Blockbench 4 outliner stores children as plain strings).
+        if (!object.has("children") && !object.has("name") && group == null) {
+            if (uuid != null) {
+                addReference(uuid, parent, elementsByUuid, groupsByUuid, bonesByUuid,
+                        consumedElements, visitedBones, textures,
+                        textureWidth, textureHeight);
+            }
             return;
         }
 
-        String name = optString(object, "name", "bone");
-        String uuid = optString(object, "uuid", null);
-        Vector3f origin = readVector(object, "origin", ZERO);
-        Vector3f rotation = readVector(object, "rotation", ZERO);
+        String name = group != null && group.name != null
+                ? group.name
+                : optString(object, "name", "bone");
+        Vector3f origin = group != null && group.origin != null
+                ? group.origin
+                : readVector(object, "origin", ZERO);
+        Vector3f rotation = group != null && group.rotation != null
+                ? group.rotation
+                : readVector(object, "rotation", ZERO);
+
+        // Guard against duplicated/cyclic group references.
+        if (uuid != null && !visitedBones.add(uuid)) return;
 
         Node bone = new Node(name, uuid, origin, rotation);
         parent.children.add(bone);
@@ -197,22 +255,38 @@ public final class BbModelParser {
         if (children == null) return;
 
         for (JsonElement child : children) {
-            parseOutlinerElement(child, bone, elementsByUuid, bonesByUuid, consumedElements,
-                    textures, textureWidth, textureHeight);
+            parseOutlinerElement(child, bone, elementsByUuid, groupsByUuid, bonesByUuid,
+                    consumedElements, visitedBones, textures, textureWidth, textureHeight);
         }
     }
 
-    private static void addElement(String uuid, Node parent,
-                                   Map<String, JsonObject> elementsByUuid,
-                                   Set<String> consumedElements,
-                                   Map<String, BbModel.Texture> textures,
-                                   float textureWidth, float textureHeight) {
-        if (uuid == null || !consumedElements.add(uuid)) return;
-        JsonObject element = elementsByUuid.get(uuid);
-        if (element == null) return;
+    private static void addReference(String uuid, Node parent,
+                                     Map<String, JsonObject> elementsByUuid,
+                                     Map<String, GroupData> groupsByUuid,
+                                     Map<String, Node> bonesByUuid,
+                                     Set<String> consumedElements,
+                                     Set<String> visitedBones,
+                                     Map<String, BbModel.Texture> textures,
+                                     float textureWidth, float textureHeight) {
+        if (uuid == null) return;
 
-        BbModel.Cube cube = parseCube(element, textures, textureWidth, textureHeight);
-        if (cube != null) parent.cubes.add(cube);
+        JsonObject element = elementsByUuid.get(uuid);
+        if (element != null) {
+            if (!consumedElements.add(uuid)) return;
+            BbModel.Cube cube = parseCube(element, textures, textureWidth, textureHeight);
+            if (cube != null) parent.cubes.add(cube);
+            return;
+        }
+
+        // Some exporters reference groups as plain uuid strings.
+        GroupData group = groupsByUuid.get(uuid);
+        if (group == null || !visitedBones.add(uuid)) return;
+
+        Node bone = new Node(group.name != null ? group.name : "bone", uuid,
+                group.origin != null ? group.origin : ZERO,
+                group.rotation != null ? group.rotation : ZERO);
+        parent.children.add(bone);
+        bonesByUuid.put(uuid, bone);
     }
 
     private static BbModel.Cube parseCube(JsonObject element,
@@ -484,14 +558,19 @@ public final class BbModelParser {
                 && !value.equalsIgnoreCase("false");
     }
 
-    private static Vector3f readVector(JsonObject object, String key, Vector3f fallback) {
+    private static Vector3f readVectorOrNull(JsonObject object, String key) {
         JsonElement element = object.get(key);
-        if (element == null || !element.isJsonArray()) return new Vector3f(fallback);
+        if (element == null || element.isJsonNull() || !element.isJsonArray()) return null;
 
         JsonArray array = element.getAsJsonArray();
-        if (array.size() < 3) return new Vector3f(fallback);
+        if (array.size() < 3) return null;
 
         return new Vector3f(arrayFloat(array, 0), arrayFloat(array, 1), arrayFloat(array, 2));
+    }
+
+    private static Vector3f readVector(JsonObject object, String key, Vector3f fallback) {
+        Vector3f value = readVectorOrNull(object, key);
+        return value != null ? value : new Vector3f(fallback);
     }
 
     private static float arrayFloat(JsonArray array, int index) {
@@ -535,6 +614,19 @@ public final class BbModelParser {
             this.uuid = uuid;
             this.origin = new Vector3f(origin);
             this.rotation = new Vector3f(rotation);
+        }
+    }
+
+    /** Bone metadata stored in the Blockbench 5.0 {@code groups} array. */
+    private static final class GroupData {
+        private final String name;
+        private final Vector3f origin;
+        private final Vector3f rotation;
+
+        private GroupData(String name, Vector3f origin, Vector3f rotation) {
+            this.name = name;
+            this.origin = origin;
+            this.rotation = rotation;
         }
     }
 }
